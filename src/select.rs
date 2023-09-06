@@ -1,16 +1,22 @@
-use crate::core::{add_to_where, sql_where_items, Whereable};
-use crate::core::{OrderItem, WhereItem};
-use crate::sqlx_exec;
-use crate::utils::{x_column_name, x_table_name};
-use crate::{SqlBuilder, SqlxBindable};
 use async_trait::async_trait;
 use sqlx::{Executor, FromRow, Postgres};
+
+use crate::core::{
+	add_to_where,
+	sql_where_items,
+	OrderItem,
+	WhereItem,
+	Whereable,
+};
+use crate::utils::{x_column_name, x_table_name};
+use crate::{sqlx_exec, SqlBuilder, SqlxBindable};
 
 pub fn select<'a>() -> SelectSqlBuilder<'a> {
 	SelectSqlBuilder {
 		table: None,
 		columns: None,
 		and_wheres: Vec::new(),
+		or_wheres: Vec::new(),
 		order_bys: None,
 		limit: None,
 		offset: None,
@@ -21,19 +27,48 @@ pub struct SelectSqlBuilder<'a> {
 	table: Option<String>,
 	columns: Option<Vec<String>>,
 	and_wheres: Vec<WhereItem<'a>>,
+	or_wheres: Vec<WhereItem<'a>>,
 	order_bys: Option<Vec<OrderItem>>,
 	limit: Option<i64>,
 	offset: Option<i64>,
 }
 
 impl<'a> SelectSqlBuilder<'a> {
-	pub fn and_where_eq<T: 'a + SqlxBindable + Send + Sync>(mut self, name: &str, val: T) -> Self {
+	pub fn and_where_eq<T: 'a + SqlxBindable + Send + Sync>(
+		mut self,
+		name: &str,
+		val: T,
+	) -> Self {
 		add_to_where(&mut self.and_wheres, name, "=", val);
 		self
 	}
 
-	pub fn and_where<T: 'a + SqlxBindable + Send + Sync>(mut self, name: &str, op: &'static str, val: T) -> Self {
+	pub fn and_where<T: 'a + SqlxBindable + Send + Sync>(
+		mut self,
+		name: &str,
+		op: &'static str,
+		val: T,
+	) -> Self {
 		add_to_where(&mut self.and_wheres, name, op, val);
+		self
+	}
+
+	pub fn or_where_eq<T: 'a + SqlxBindable + Send + Sync>(
+		mut self,
+		name: &str,
+		val: T,
+	) -> Self {
+		add_to_where(&mut self.or_wheres, name, "=", val);
+		self
+	}
+
+	pub fn or_where<T: 'a + SqlxBindable + Send + Sync>(
+		mut self,
+		name: &str,
+		op: &'static str,
+		val: T,
+	) -> Self {
+		add_to_where(&mut self.or_wheres, name, op, val);
 		self
 	}
 
@@ -74,7 +109,10 @@ impl<'a> SelectSqlBuilder<'a> {
 		sqlx_exec::exec(db_pool, self).await
 	}
 
-	pub async fn fetch_one<'e, DB, D>(&'a self, db_pool: DB) -> Result<D, sqlx::Error>
+	pub async fn fetch_one<'e, DB, D>(
+		&'a self,
+		db_pool: DB,
+	) -> Result<D, sqlx::Error>
 	where
 		DB: Executor<'e, Database = Postgres>,
 		D: for<'r> FromRow<'r, sqlx::postgres::PgRow> + Unpin + Send,
@@ -82,7 +120,10 @@ impl<'a> SelectSqlBuilder<'a> {
 		sqlx_exec::fetch_as_one::<DB, D, _>(db_pool, self).await
 	}
 
-	pub async fn fetch_optional<'e, DB, D>(&'a self, db_pool: DB) -> Result<Option<D>, sqlx::Error>
+	pub async fn fetch_optional<'e, DB, D>(
+		&'a self,
+		db_pool: DB,
+	) -> Result<Option<D>, sqlx::Error>
 	where
 		DB: Executor<'e, Database = Postgres>,
 		D: for<'r> FromRow<'r, sqlx::postgres::PgRow> + Unpin + Send,
@@ -90,7 +131,10 @@ impl<'a> SelectSqlBuilder<'a> {
 		sqlx_exec::fetch_as_optional::<DB, D, _>(db_pool, self).await
 	}
 
-	pub async fn fetch_all<'e, DB, D>(&'a self, db_pool: DB) -> Result<Vec<D>, sqlx::Error>
+	pub async fn fetch_all<'e, DB, D>(
+		&'a self,
+		db_pool: DB,
+	) -> Result<Vec<D>, sqlx::Error>
 	where
 		DB: Executor<'e, Database = Postgres>,
 		D: for<'r> FromRow<'r, sqlx::postgres::PgRow> + Unpin + Send,
@@ -100,11 +144,20 @@ impl<'a> SelectSqlBuilder<'a> {
 }
 
 impl<'a> Whereable<'a> for SelectSqlBuilder<'a> {
-	fn and_where_eq<V: 'a + SqlxBindable + Send + Sync>(self, name: &str, val: V) -> Self {
+	fn and_where_eq<V: 'a + SqlxBindable + Send + Sync>(
+		self,
+		name: &str,
+		val: V,
+	) -> Self {
 		SelectSqlBuilder::and_where_eq(self, name, val)
 	}
 
-	fn and_where<V: 'a + SqlxBindable + Send + Sync>(self, name: &str, op: &'static str, val: V) -> Self {
+	fn and_where<V: 'a + SqlxBindable + Send + Sync>(
+		self,
+		name: &str,
+		op: &'static str,
+		val: V,
+	) -> Self {
 		SelectSqlBuilder::and_where(self, name, op, val)
 	}
 }
@@ -120,11 +173,15 @@ impl<'a> SqlBuilder<'a> for SelectSqlBuilder<'a> {
 		// SQL: name1, name2,
 		// For now, if no column, will do a "*"
 		match &self.columns {
-			Some(columns) => {
-				let names = columns.iter().map(|c| x_column_name(c)).collect::<Vec<String>>().join(", ");
+			| Some(columns) => {
+				let names = columns
+					.iter()
+					.map(|c| x_column_name(c))
+					.collect::<Vec<String>>()
+					.join(", ");
 				sql.push_str(&format!("{} ", names));
 			}
-			None => sql.push_str(&format!("{} ", "*")),
+			| None => sql.push_str(&format!("{} ", "*")),
 		};
 
 		// SQL: FROM table_name
@@ -137,6 +194,12 @@ impl<'a> SqlBuilder<'a> for SelectSqlBuilder<'a> {
 		if !self.and_wheres.is_empty() {
 			let sql_where = sql_where_items(&self.and_wheres, 1);
 			sql.push_str(&format!("WHERE {} ", &sql_where));
+		}
+
+		// SQL: WHERE ... OR ...
+		if !self.and_wheres.is_empty() && !self.or_wheres.is_empty() {
+			let sql_where = sql_where_items(&self.or_wheres, 1);
+			sql.push_str(&format!("OR {} ", &sql_where));
 		}
 
 		// SQL: ORDER BY
@@ -162,7 +225,13 @@ impl<'a> SqlBuilder<'a> for SelectSqlBuilder<'a> {
 		sql
 	}
 
-	fn vals(&'a self) -> Box<dyn Iterator<Item = &Box<dyn SqlxBindable + 'a + Send + Sync>> + 'a + Send> {
+	fn vals(
+		&'a self,
+	) -> Box<
+		dyn Iterator<Item = &Box<dyn SqlxBindable + 'a + Send + Sync>>
+			+ 'a
+			+ Send,
+	> {
 		let iter = self.and_wheres.iter().map(|wi| &wi.val);
 		Box::new(iter)
 	}
@@ -174,7 +243,10 @@ impl<'a> SqlBuilder<'a> for SelectSqlBuilder<'a> {
 		Self::exec(self, db_pool).await
 	}
 
-	async fn fetch_one<'e, DB, D>(&'a self, db_pool: DB) -> Result<D, sqlx::Error>
+	async fn fetch_one<'e, DB, D>(
+		&'a self,
+		db_pool: DB,
+	) -> Result<D, sqlx::Error>
 	where
 		DB: Executor<'e, Database = Postgres>,
 		D: for<'r> FromRow<'r, sqlx::postgres::PgRow> + Unpin + Send,
@@ -182,7 +254,10 @@ impl<'a> SqlBuilder<'a> for SelectSqlBuilder<'a> {
 		Self::fetch_one::<DB, D>(self, db_pool).await
 	}
 
-	async fn fetch_optional<'e, DB, D>(&'a self, db_pool: DB) -> Result<Option<D>, sqlx::Error>
+	async fn fetch_optional<'e, DB, D>(
+		&'a self,
+		db_pool: DB,
+	) -> Result<Option<D>, sqlx::Error>
 	where
 		DB: Executor<'e, Database = Postgres>,
 		D: for<'r> FromRow<'r, sqlx::postgres::PgRow> + Unpin + Send,
@@ -190,7 +265,10 @@ impl<'a> SqlBuilder<'a> for SelectSqlBuilder<'a> {
 		Self::fetch_optional::<DB, D>(self, db_pool).await
 	}
 
-	async fn fetch_all<'e, DB, D>(&'a self, db_pool: DB) -> Result<Vec<D>, sqlx::Error>
+	async fn fetch_all<'e, DB, D>(
+		&'a self,
+		db_pool: DB,
+	) -> Result<Vec<D>, sqlx::Error>
 	where
 		DB: Executor<'e, Database = Postgres>,
 		D: for<'r> FromRow<'r, sqlx::postgres::PgRow> + Unpin + Send,
