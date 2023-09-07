@@ -6,13 +6,7 @@ edition = "2018"
 homepage = "https://github.com/jeremychone/rust-sqlb"
 repository = "https://github.com/jeremychone/rust-sqlb"
 description = "Simple, expressive, and progressive SQL Builder for Rust."
-keywords = [
-	"sql",
-	"sqlbuilder",
-	"database",
-	"orm",
-	"postgres"
-]
+keywords = ["sql", "sqlbuilder", "database", "orm", "postgres"]
 categories = ["database"]
 license = "MIT OR Apache-2.0"
 
@@ -20,12 +14,19 @@ license = "MIT OR Apache-2.0"
 members = [".", "sqlb-macros"]
 
 [dependencies]
-sqlx = { version = "0.7", features = [ "runtime-tokio-rustls", "postgres", "time", "uuid" ] }
-sqlb-macros = { version="0.3.2", path = "sqlb-macros" }
+sqlx = { version = "0.7", features = [
+	"runtime-tokio-rustls",
+	"postgres",
+	"time",
+	"uuid",
+] }
+sqlb-macros = { version = "0.3.2", path = "sqlb-macros" }
 async-trait = "^0.1"
 time = "^0.3"
 uuid = "^1.4"
-chrono = { version = "^0.4", optional = true }
+chrono = { version = "^0.4", default-features = false, features = [
+	"clock",
+], optional = true }
 
 [features]
 default = []
