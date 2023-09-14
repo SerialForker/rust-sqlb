@@ -1,8 +1,8 @@
 //! Currently, `SqlxBindable` represents a value that can be bound.
-//! This requires cloning the value. The performance impact should be minimal, and for bulk updates, direct usage of `sqlx` can be preferred.
-//! Eventually, this might change to follow the `'args` pattern of `sqlx` `Builder`,
+//! This requires cloning the value. The performance impact should be minimal,
+//! and for bulk updates, direct usage of `sqlx` can be preferred. Eventually,
+//! this might change to follow the `'args` pattern of `sqlx` `Builder`,
 //! but at this point, priority is given to API ergonomics.
-//!
 
 use time::OffsetDateTime;
 use uuid::Uuid;
@@ -10,12 +10,18 @@ use uuid::Uuid;
 pub trait SqlxBindable: std::fmt::Debug {
 	fn bind_query<'q>(
 		&'q self,
-		query: sqlx::query::Query<'q, sqlx::Postgres, sqlx::postgres::PgArguments>,
+		query: sqlx::query::Query<
+			'q,
+			sqlx::Postgres,
+			sqlx::postgres::PgArguments,
+		>,
 	) -> sqlx::query::Query<'q, sqlx::Postgres, sqlx::postgres::PgArguments>;
 
 	fn raw(&self) -> Option<&str> {
 		None
 	}
+
+	fn value(&self) -> String;
 }
 
 #[macro_export]
@@ -26,6 +32,10 @@ macro_rules! bindable {
                 let query = query.bind(self.clone());
                 query
             }
+
+			fn value(&self) -> String {
+				self.to_string()
+			}
         }
 
         impl $crate::SqlxBindable for &$t {
@@ -33,6 +43,10 @@ macro_rules! bindable {
                 let query = query.bind(<$t>::clone(self));
                 query
             }
+
+			fn value(&self) -> String {
+				self.to_string()
+			}
         }
 
         )*
@@ -48,12 +62,20 @@ macro_rules! bindable_to_string {
 				let query = query.bind(self.to_string());
 				query
 			}
+
+			fn value(&self) -> String {
+				self.to_string()
+			}
 		}
 
 		impl $crate::SqlxBindable for &$t {
 			fn bind_query<'q>(&self, query: sqlx::query::Query<'q, sqlx::Postgres, sqlx::postgres::PgArguments>) -> sqlx::query::Query<'q, sqlx::Postgres, sqlx::postgres::PgArguments> {
 				let query = query.bind(self.to_string());
 				query
+			}
+
+			fn value(&self) -> String {
+				self.to_string()
 			}
 		}
 		)*
@@ -71,10 +93,18 @@ where
 {
 	fn bind_query<'q>(
 		&'q self,
-		query: sqlx::query::Query<'q, sqlx::Postgres, sqlx::postgres::PgArguments>,
+		query: sqlx::query::Query<
+			'q,
+			sqlx::Postgres,
+			sqlx::postgres::PgArguments,
+		>,
 	) -> sqlx::query::Query<'q, sqlx::Postgres, sqlx::postgres::PgArguments> {
 		let query = query.bind(self.clone());
 		query
+	}
+
+	fn value(&self) -> String {
+		String::default()
 	}
 }
 
@@ -91,12 +121,11 @@ bindable!(Uuid, OffsetDateTime);
 // region: 		--- chrono support
 #[cfg(feature = "chrono-support")]
 mod chrono_support {
-	use chrono::{NaiveDateTime, NaiveDate, NaiveTime, DateTime, Utc};
+	use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Utc};
 
 	bindable!(NaiveDateTime, NaiveDate, NaiveTime, DateTime<Utc>);
 }
 // endregion: --- chrono support
-
 
 #[derive(Debug)]
 pub struct Raw(pub &'static str);
@@ -105,13 +134,21 @@ impl SqlxBindable for Raw {
 	// just return the query given, since no binding should be taken place
 	fn bind_query<'q>(
 		&self,
-		query: sqlx::query::Query<'q, sqlx::Postgres, sqlx::postgres::PgArguments>,
+		query: sqlx::query::Query<
+			'q,
+			sqlx::Postgres,
+			sqlx::postgres::PgArguments,
+		>,
 	) -> sqlx::query::Query<'q, sqlx::Postgres, sqlx::postgres::PgArguments> {
 		query
 	}
 
 	fn raw(&self) -> Option<&str> {
 		Some(self.0)
+	}
+
+	fn value(&self) -> String {
+		self.0.to_string()
 	}
 }
 // endregion: --- Raw Value

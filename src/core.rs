@@ -1,21 +1,13 @@
 use async_trait::async_trait;
+pub use sqlb_macros::Fields;
+use sqlx::{Executor, FromRow, Postgres};
 
-pub use crate::delete::delete;
-pub use crate::delete::delete_all;
-pub use crate::delete::DeleteSqlBuilder;
-pub use crate::insert::insert;
-pub use crate::insert::InsertSqlBuilder;
-pub use crate::select::select;
-pub use crate::select::SelectSqlBuilder;
-pub use crate::update::update;
-pub use crate::update::update_all;
-pub use crate::update::UpdateSqlBuilder;
+pub use crate::delete::{delete, delete_all, DeleteSqlBuilder};
+pub use crate::insert::{insert, InsertSqlBuilder};
+pub use crate::select::{select, SelectSqlBuilder};
+pub use crate::update::{update, update_all, UpdateSqlBuilder};
 use crate::utils::x_column_name;
 pub use crate::val::SqlxBindable;
-pub use sqlb_macros::Fields;
-use sqlx::Executor;
-use sqlx::FromRow;
-use sqlx::Postgres;
 
 #[derive(Debug)]
 pub struct Field<'a> {
@@ -45,10 +37,12 @@ impl<'a, T: 'a + SqlxBindable + Send + Sync> From<(String, T)> for Field<'a> {
 /// `(name, value)` vector.
 /// Typically implemented with `#[derive(Fields)]`
 pub trait HasFields {
-	/// Consume and returns the `Field(name, value)` where the value is a not none `SqlxBindable`.
+	/// Consume and returns the `Field(name, value)` where the value is a not
+	/// none `SqlxBindable`.
 	fn not_none_fields<'a>(self) -> Vec<Field<'a>>;
 
-	/// Consume and returns the `Field(name, value)` where the value is a `SqlxBindable`.
+	/// Consume and returns the `Field(name, value)` where the value is a
+	/// `SqlxBindable`.
 	fn all_fields<'a>(self) -> Vec<Field<'a>>;
 
 	/// Return the array of all field names this struct has.
@@ -62,7 +56,9 @@ pub(crate) struct WhereItem<'a> {
 	pub val: Box<dyn SqlxBindable + 'a + Send + Sync>,
 }
 
-impl<'a, T: 'a + SqlxBindable + Send + Sync> From<(&str, &'static str, T)> for WhereItem<'a> {
+impl<'a, T: 'a + SqlxBindable + Send + Sync> From<(&str, &'static str, T)>
+	for WhereItem<'a>
+{
 	fn from((name, op, value): (&str, &'static str, T)) -> Self {
 		WhereItem {
 			name: name.to_owned(),
@@ -103,8 +99,8 @@ impl From<&str> for OrderItem {
 impl From<&OrderItem> for String {
 	fn from(odr: &OrderItem) -> Self {
 		match odr.dir {
-			OrderDir::Asc => odr.name.to_string(),
-			OrderDir::Desc => format!("{} {}", odr.name, "DESC"),
+			| OrderDir::Asc => odr.name.to_string(),
+			| OrderDir::Desc => format!("{} {}", odr.name, "DESC"),
 		}
 	}
 }
@@ -112,19 +108,34 @@ impl From<&OrderItem> for String {
 #[async_trait]
 pub trait SqlBuilder<'a> {
 	fn sql(&self) -> String;
-	fn vals(&'a self) -> Box<dyn Iterator<Item = &Box<dyn SqlxBindable + 'a + Send + Sync>> + 'a + Send>;
+	fn vals(
+		&'a self,
+	) -> Box<
+		dyn Iterator<Item = &Box<dyn SqlxBindable + 'a + Send + Sync>>
+			+ 'a
+			+ Send,
+	>;
 
-	async fn fetch_one<'e, DB, D>(&'a self, db_pool: DB) -> Result<D, sqlx::Error>
+	async fn fetch_one<'e, DB, D>(
+		&'a self,
+		db_pool: DB,
+	) -> Result<D, sqlx::Error>
 	where
 		DB: Executor<'e, Database = Postgres>,
 		D: for<'r> FromRow<'r, sqlx::postgres::PgRow> + Unpin + Send;
 
-	async fn fetch_optional<'e, DB, D>(&'a self, db_pool: DB) -> Result<Option<D>, sqlx::Error>
+	async fn fetch_optional<'e, DB, D>(
+		&'a self,
+		db_pool: DB,
+	) -> Result<Option<D>, sqlx::Error>
 	where
 		DB: Executor<'e, Database = Postgres>,
 		D: for<'r> FromRow<'r, sqlx::postgres::PgRow> + Unpin + Send;
 
-	async fn fetch_all<'e, DB, D>(&'a self, db_pool: DB) -> Result<Vec<D>, sqlx::Error>
+	async fn fetch_all<'e, DB, D>(
+		&'a self,
+		db_pool: DB,
+	) -> Result<Vec<D>, sqlx::Error>
 	where
 		DB: Executor<'e, Database = Postgres>,
 		D: for<'r> FromRow<'r, sqlx::postgres::PgRow> + Unpin + Send;
@@ -135,8 +146,17 @@ pub trait SqlBuilder<'a> {
 }
 
 pub trait Whereable<'a> {
-	fn and_where_eq<T: 'a + SqlxBindable + Send + Sync>(self, name: &str, val: T) -> Self;
-	fn and_where<T: 'a + SqlxBindable + Send + Sync>(self, name: &str, op: &'static str, val: T) -> Self;
+	fn and_where_eq<T: 'a + SqlxBindable + Send + Sync>(
+		self,
+		name: &str,
+		val: T,
+	) -> Self;
+	fn and_where<T: 'a + SqlxBindable + Send + Sync>(
+		self,
+		name: &str,
+		op: &'static str,
+		val: T,
+	) -> Self;
 }
 
 // endregion: Common Types
@@ -148,7 +168,8 @@ pub(crate) fn add_to_where<'a, T: 'a + SqlxBindable + Send + Sync>(
 	op: &'static str,
 	val: T,
 ) {
-	// Note: to_vec so that when it into_iter we do not get the reference of the tuple items.
+	// Note: to_vec so that when it into_iter we do not get the reference of the
+	// tuple items.
 	let wher = WhereItem {
 		name: name.to_owned(),
 		op,
@@ -159,7 +180,10 @@ pub(crate) fn add_to_where<'a, T: 'a + SqlxBindable + Send + Sync>(
 }
 
 // Note: for now does not care about the base.
-pub(crate) fn into_returnings(_base: Option<Vec<String>>, names: &[&str]) -> Option<Vec<String>> {
+pub(crate) fn into_returnings(
+	_base: Option<Vec<String>>,
+	names: &[&str],
+) -> Option<Vec<String>> {
 	Some(names.iter().map(|s| s.to_string()).collect())
 }
 // endregion: property into helpers
@@ -185,11 +209,11 @@ pub(crate) fn sql_comma_params(fields: &[Field]) -> (i32, String) {
 			vals.push_str(", ");
 		};
 		match value.raw() {
-			None => {
+			| None => {
 				vals.push_str(&format!("${}", binding_idx));
 				binding_idx += 1;
 			}
-			Some(raw) => vals.push_str(raw),
+			| Some(raw) => vals.push_str(raw),
 		};
 	}
 	(binding_idx, vals)
@@ -197,17 +221,37 @@ pub(crate) fn sql_comma_params(fields: &[Field]) -> (i32, String) {
 
 // If first array, idx_offset should be 1
 // SQL: "name1" = &1, ...
-pub(crate) fn sql_where_items(where_items: &[WhereItem], idx_start: usize) -> String {
+pub(crate) fn sql_where_items(
+	where_items: &[WhereItem],
+	idx_start: usize,
+) -> String {
 	where_items
 		.iter()
 		.enumerate()
-		.map(|(idx, WhereItem { name, op, .. })| format!("{} {} ${}", x_column_name(name), op, idx + idx_start))
+		.map(|(idx, WhereItem { name, op, val })| {
+			let key = x_column_name(name);
+			let binding_idx = idx + idx_start;
+			let mut binding_operator = "";
+
+			// TODO(phisyx): mieux gérer les opérateurs.
+			// HACK(phisyx): id = UUID
+			if (name == "id" || name.contains("_id")) && val.value().len() == 36
+			{
+				binding_operator = "::uuid";
+			}
+
+			format!("{} {} ${}{}", key, op, binding_idx, binding_operator)
+		})
 		.collect::<Vec<String>>()
 		.join(" AND ")
 }
 
 // SQL: "Id", "userName", ...
 pub(crate) fn sql_returnings(returnings: &[String]) -> String {
-	returnings.iter().map(|r| x_column_name(r)).collect::<Vec<String>>().join(", ")
+	returnings
+		.iter()
+		.map(|r| x_column_name(r))
+		.collect::<Vec<String>>()
+		.join(", ")
 }
 // endregion: Builder Utils
