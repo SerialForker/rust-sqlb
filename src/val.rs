@@ -20,8 +20,6 @@ pub trait SqlxBindable: std::fmt::Debug {
 	fn raw(&self) -> Option<&str> {
 		None
 	}
-
-	fn value(&self) -> String;
 }
 
 #[macro_export]
@@ -32,10 +30,6 @@ macro_rules! bindable {
                 let query = query.bind(self.clone());
                 query
             }
-
-			fn value(&self) -> String {
-				self.to_string()
-			}
         }
 
         impl $crate::SqlxBindable for &$t {
@@ -43,10 +37,6 @@ macro_rules! bindable {
                 let query = query.bind(<$t>::clone(self));
                 query
             }
-
-			fn value(&self) -> String {
-				self.to_string()
-			}
         }
 
         )*
@@ -62,20 +52,12 @@ macro_rules! bindable_to_string {
 				let query = query.bind(self.to_string());
 				query
 			}
-
-			fn value(&self) -> String {
-				self.to_string()
-			}
 		}
 
 		impl $crate::SqlxBindable for &$t {
 			fn bind_query<'q>(&self, query: sqlx::query::Query<'q, sqlx::Postgres, sqlx::postgres::PgArguments>) -> sqlx::query::Query<'q, sqlx::Postgres, sqlx::postgres::PgArguments> {
 				let query = query.bind(self.to_string());
 				query
-			}
-
-			fn value(&self) -> String {
-				self.to_string()
 			}
 		}
 		)*
@@ -101,10 +83,6 @@ where
 	) -> sqlx::query::Query<'q, sqlx::Postgres, sqlx::postgres::PgArguments> {
 		let query = query.bind(self.clone());
 		query
-	}
-
-	fn value(&self) -> String {
-		String::default()
 	}
 }
 
@@ -145,10 +123,6 @@ impl SqlxBindable for Raw {
 
 	fn raw(&self) -> Option<&str> {
 		Some(self.0)
-	}
-
-	fn value(&self) -> String {
-		self.0.to_string()
 	}
 }
 // endregion: --- Raw Value

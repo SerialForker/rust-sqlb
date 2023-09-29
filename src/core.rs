@@ -228,17 +228,21 @@ pub(crate) fn sql_where_items(
 	where_items
 		.iter()
 		.enumerate()
-		.map(|(idx, WhereItem { name, op, val })| {
+		.map(|(idx, WhereItem { name, op, .. })| {
+			let mut binding_operator = "";
+			let name = if name.contains("::") {
+				if let Some((splitted_name, operator)) = name.split_once("::") {
+					binding_operator = operator;
+					splitted_name
+				} else {
+					name
+				}
+			} else {
+				name
+			};
+
 			let key = x_column_name(name);
 			let binding_idx = idx + idx_start;
-			let mut binding_operator = "";
-
-			// TODO(phisyx): mieux gérer les opérateurs.
-			// HACK(phisyx): id = UUID
-			if (name == "id" || name.contains("_id")) && val.value().len() == 36
-			{
-				binding_operator = "::uuid";
-			}
 
 			format!("{} {} ${}{}", key, op, binding_idx, binding_operator)
 		})
